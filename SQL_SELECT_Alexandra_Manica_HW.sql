@@ -37,7 +37,7 @@ INNER JOIN public.film_category fc
     ON f.film_id = fc.film_id
 INNER JOIN public.category c
     ON fc.category_id = c.category_id
-WHERE c.name = 'Animation'
+WHERE UPPER(c.name) = UPPER('Animation')
 	AND f.rating IN ('G', 'PG')
   	AND f.rental_rate > 1
   	AND f.release_year BETWEEN 2017 AND 2019
@@ -59,7 +59,7 @@ WHERE f.rental_rate > 1
       	FROM public.film_category fc
       	INNER JOIN public.category c
         	ON fc.category_id = c.category_id
-	WHERE c.name = 'Animation'
+	WHERE UPPER(c.name) = UPPER('Animation')
 )
 ORDER BY f.title;
 
@@ -70,7 +70,7 @@ WITH animation_films AS (
     FROM public.film_category fc
     INNER JOIN public.category c
         ON fc.category_id = c.category_id
-    WHERE c.name = 'Animation'
+    WHERE UPPER(c.name) = UPPER('Animation')
 )
 SELECT
 	f.title AS film_title,
@@ -91,7 +91,7 @@ ORDER BY f.title;
 -- Calculate the revenue earned by each rental store after March 2017 (since April) (include columns: address and address2 – as one column, revenue)
 
 -- Assumptions:
--- "after March 2017" is interpreted as payment_date >= '2017-04-01'
+-- "after March 2017" is interpreted as WHERE EXTRACT(YEAR FROM p.payment_date) = 2017 AND EXTRACT(MONTH FROM p.payment_date) = 4
 -- address2 can be NULL so COALESCE is used to replace it with empty string
 -- revenue is calculated via payment table, joined through inventory - rental - payment
 -- schema: public
@@ -129,7 +129,8 @@ INNER JOIN public.rental r
 	ON i.inventory_id = r.inventory_id 
 INNER JOIN public.payment p 
      ON r.rental_id = p.rental_id 
-WHERE p.payment_date >= '2017-04-01'
+WHERE EXTRACT(YEAR FROM p.payment_date) = 2017
+  AND EXTRACT(MONTH FROM p.payment_date) = 4
 GROUP BY s.store_id, 
 a.address || ' ' || COALESCE(a.address2, '');
 
@@ -149,7 +150,8 @@ FROM (
 		ON i.inventory_id = r.inventory_id 
 	INNER JOIN public.payment p 
      	ON r.rental_id = p.rental_id 
-	WHERE p.payment_date >= '2017-04-01'
+	WHERE EXTRACT(YEAR FROM p.payment_date) = 2017
+		AND EXTRACT(MONTH FROM p.payment_date) = 4
 	GROUP BY s.store_id ) store_revenue_sq
 INNER JOIN public.store s
 	ON store_revenue_sq.store_id = s.store_id 
@@ -168,7 +170,8 @@ WITH store_revenue_cte AS (
 		ON i.inventory_id = r.inventory_id 
 	INNER JOIN public.payment p 
      	ON r.rental_id = p.rental_id 
-	WHERE p.payment_date >= '2017-04-01'
+	WHERE EXTRACT(YEAR FROM p.payment_date) = 2017
+		AND EXTRACT(MONTH FROM p.payment_date) = 4
 	GROUP BY s.store_id 
 )
 SELECT 
@@ -212,7 +215,6 @@ INNER JOIN public.address a
 -- INNER JOIN ensures only actors who have at least one qualifying film (released since 2015) are included in the result.
 -- Actors with no films or no films after 2015 are excluded.
 SELECT
-	a.actor_id, 
     a.first_name,
     a.last_name,
     COUNT(f.film_id) AS number_of_movies
@@ -223,7 +225,6 @@ INNER JOIN public.film f
     ON fa.film_id = f.film_id
 WHERE f.release_year >= 2015
 GROUP by
-	a.actor_id, 
     a.first_name, 
     a.last_name
 ORDER BY number_of_movies DESC
@@ -231,7 +232,6 @@ LIMIT 5;
 
 -- b) SUBQUERY Solution
 SELECT
-	a.actor_id, 
     a.first_name,
     a.last_name,
     COUNT(movie_number_sq.film_id) AS number_of_movies
@@ -246,7 +246,6 @@ FROM (
 	INNER JOIN public.actor a 
 		ON movie_number_sq.actor_id = a.actor_id	
 GROUP by
-	a.actor_id, 
     a.first_name, 
     a.last_name
 ORDER BY number_of_movies DESC
@@ -263,7 +262,6 @@ WITH movie_number_cte AS(
 	WHERE f.release_year >= 2015
 )
 SELECT
-	a.actor_id, 
     a.first_name,
     a.last_name,
     COUNT(movie_number.film_id) AS number_of_movies
@@ -271,7 +269,6 @@ FROM movie_number_cte movie_number
 	INNER JOIN public.actor a 
 		ON movie_number.actor_id = a.actor_id	
 GROUP by
-	a.actor_id, 
     a.first_name, 
     a.last_name
 ORDER BY number_of_movies DESC
@@ -309,55 +306,55 @@ LIMIT 5;
 -- slight over-engineering for a query of this complexity
 
 -- a) JOIN Solution
--- INNER JOIN ensures only films that have a category assigned are included
-SELECT 
+
+SELECT
     f.release_year,
-    SUM(CASE WHEN c.name = 'Drama' THEN 1 ELSE 0 END) AS number_of_drama_movies,
-    SUM(CASE WHEN c.name = 'Travel' THEN 1 ELSE 0 END) AS number_of_travel_movies,
-    SUM(CASE WHEN c.name = 'Documentary' THEN 1 ELSE 0 END) AS number_of_documentary_movies
+    COALESCE(SUM(CASE WHEN UPPER(c.name) = UPPER('Drama') THEN 1 END), 0) AS number_of_drama_movies,
+    COALESCE(SUM(CASE WHEN UPPER(c.name) = UPPER('Travel') THEN 1 END), 0) AS number_of_travel_movies,
+    COALESCE(SUM(CASE WHEN UPPER(c.name) = UPPER('Documentary') THEN 1 END), 0) AS number_of_documentary_movies
 FROM public.film f
-INNER JOIN public.film_category fc 
-    ON f.film_id = fc.film_id
-INNER JOIN public.category c 
-    ON fc.category_id = c.category_id
+LEFT JOIN public.film_category fc 
+	ON f.film_id = fc.film_id
+LEFT JOIN public.category c 
+	ON fc.category_id = c.category_id
 GROUP BY f.release_year
 ORDER BY f.release_year DESC;
 
 -- b) SUBQUERY Solution
-SELECT 
-   	categories_sq.release_year,
-    SUM(CASE WHEN categories_sq.category_name = 'Drama' THEN 1 ELSE 0 END) AS number_of_drama_movies,
-    SUM(CASE WHEN categories_sq.category_name = 'Travel' THEN 1 ELSE 0 END) AS number_of_travel_movies,
-    SUM(CASE WHEN categories_sq.category_name = 'Documentary' THEN 1 ELSE 0 END) AS number_of_documentary_movies
+SELECT
+    categories_sq.release_year,
+    COALESCE(SUM(CASE WHEN categories_sq.category_name = UPPER('Drama') THEN 1 END), 0) AS number_of_drama_movies,
+    COALESCE(SUM(CASE WHEN categories_sq.category_name = UPPER('Travel') THEN 1 END), 0) AS number_of_travel_movies,
+    COALESCE(SUM(CASE WHEN categories_sq.category_name = UPPER('Documentary') THEN 1 END), 0) AS number_of_documentary_movies
 FROM (
-    SELECT 
+    SELECT
         f.release_year,
-        c.name AS category_name
+        UPPER(c.name) AS category_name
     FROM public.film f
-    INNER JOIN public.film_category fc 
-        ON f.film_id = fc.film_id
-    INNER JOIN public.category c 
-        ON fc.category_id = c.category_id
+    LEFT JOIN public.film_category fc 
+    	ON f.film_id = fc.film_id
+    LEFT JOIN public.category c 
+    	ON fc.category_id = c.category_id
 ) categories_sq
 GROUP BY categories_sq.release_year
 ORDER BY categories_sq.release_year DESC;
 
 -- c) CTE Solution
 WITH categories_cte AS (
-	SELECT 
+    SELECT
         f.release_year,
-        c.name AS category_name
+        UPPER(c.name) AS category_name
     FROM public.film f
-    INNER JOIN public.film_category fc 
-        ON f.film_id = fc.film_id
-    INNER JOIN public.category c 
-        ON fc.category_id = c.category_id
+    LEFT JOIN public.film_category fc 
+		ON f.film_id = fc.film_id
+    LEFT JOIN public.category c 
+    	ON fc.category_id = c.category_id
 )
-SELECT 
-   	categories_cte.release_year,
-    SUM(CASE WHEN categories_cte.category_name = 'Drama' THEN 1 ELSE 0 END) AS number_of_drama_movies,
-    SUM(CASE WHEN categories_cte.category_name = 'Travel' THEN 1 ELSE 0 END) AS number_of_travel_movies,
-    SUM(CASE WHEN categories_cte.category_name = 'Documentary' THEN 1 ELSE 0 END) AS number_of_documentary_movies
+SELECT
+    categories_cte.release_year,
+    COALESCE(SUM(CASE WHEN categories_cte.category_name = UPPER('Drama') THEN 1 END), 0) AS number_of_drama_movies,
+    COALESCE(SUM(CASE WHEN categories_cte.category_name = UPPER('Travel') THEN 1 END), 0) AS number_of_travel_movies,
+    COALESCE(SUM(CASE WHEN categories_cte.category_name = UPPER('Documentary') THEN 1 END), 0) AS number_of_documentary_movies
 FROM categories_cte
 GROUP BY categories_cte.release_year
 ORDER BY categories_cte.release_year DESC;
@@ -416,58 +413,33 @@ ORDER BY total_revenue_2017 desc
 LIMIT 3;
 
 -- c) CTE Solution
-WITH revenue_2017_cte AS (
+WITH revenue_cte AS (
     SELECT
-        p.staff_id,
+        r.staff_id,
         s.first_name,
         s.last_name,
-        SUM(p.amount) AS total_revenue_2017
+        SUM(p.amount) AS total_revenue_2017,
+        MAX(p.payment_id) AS last_payment_id
     FROM public.payment p
-    JOIN public.staff s
-      ON s.staff_id = p.staff_id
+    JOIN public.rental r ON r.rental_id = p.rental_id
+    JOIN public.staff s ON s.staff_id = r.staff_id
     WHERE DATE_PART('year', p.payment_date) = 2017
     GROUP BY
-        p.staff_id,
+        r.staff_id,
         s.first_name,
         s.last_name
-),
-last_payment_date_cte AS (
-    SELECT
-        p.staff_id,
-        MAX(p.payment_date) AS last_payment_date
-    FROM public.payment p
-    WHERE DATE_PART('year', p.payment_date) = 2017
-    GROUP BY p.staff_id
-),
-last_store_cte AS (
-    SELECT
-        p.staff_id,
-        i.store_id,
-        p.payment_date,
-        p.payment_id
-    FROM public.payment p
-    JOIN last_payment_date_cte lpd
-		ON lpd.staff_id = p.staff_id AND lpd.last_payment_date = p.payment_date
-    JOIN public.rental r
-      	ON r.rental_id = p.rental_id
-    JOIN public.inventory i
-      	ON i.inventory_id = r.inventory_id
-    WHERE DATE_PART('year', p.payment_date) = 2017
 )
 SELECT
-    r.staff_id,
-    r.first_name,
-    r.last_name,
-    (
-        SELECT ls.store_id
-        FROM last_store_cte ls
-        WHERE ls.staff_id = r.staff_id
-        ORDER BY ls.payment_id DESC
-        LIMIT 1
-    ) AS last_store_id,
-    r.total_revenue_2017
-FROM revenue_2017_cte r
-ORDER BY r.total_revenue_2017 DESC
+    rc.staff_id,
+    rc.first_name,
+    rc.last_name,
+    i.store_id AS last_store_id,
+    rc.total_revenue_2017
+FROM revenue_cte rc
+JOIN public.payment p ON p.payment_id = rc.last_payment_id
+JOIN public.rental r ON r.rental_id = p.rental_id
+JOIN public.inventory i ON i.inventory_id = r.inventory_id
+ORDER BY rc.total_revenue_2017 DESC
 LIMIT 3;
 
 
@@ -624,10 +596,8 @@ LIMIT 5;
 
 -- V1 - a) JOIN Solution
 SELECT
-    a.actor_id,
     a.first_name,
     a.last_name,
-    MAX(f.release_year) AS last_release_year,
     CAST(DATE_PART('year', current_date) AS int) - MAX(f.release_year) AS gap_between_last_release_and_current_year
 FROM actor a
 INNER JOIN film_actor fa
@@ -635,17 +605,14 @@ INNER JOIN film_actor fa
 INNER JOIN film f
     ON fa.film_id = f.film_id
 GROUP BY
-    a.actor_id,
     a.first_name,
     a.last_name
 ORDER BY DATE_PART('year', current_date) - MAX(f.release_year) DESC;
 
 -- V1 - b) Subquery Solution
 SELECT
-    a.actor_id,
     a.first_name,
     a.last_name,
-    last_release_sq.last_release_year,
     last_release_sq.gap_between_last_release_and_current_year
 FROM (
     SELECT 
@@ -673,10 +640,8 @@ WITH last_release_cte AS (
 	    GROUP BY fa.actor_id
 )
 SELECT
-    a.actor_id,
     a.first_name,
     a.last_name,
-    last_release_cte.last_release_year,
     last_release_cte.gap_between_last_release_and_current_year
 FROM last_release_cte 
 INNER JOIN actor a 
@@ -709,7 +674,6 @@ ORDER BY last_release_cte.gap_between_last_release_and_current_year DESC;
 
 -- V2.1 - a) JOIN Solution
 SELECT 
-    a.actor_id,
     a.first_name,
     a.last_name,
     f.release_year AS current_release_year,
@@ -726,18 +690,17 @@ LEFT JOIN public.film f2
     ON fa2.film_id = f2.film_id
    AND f2.release_year > f.release_year
 GROUP BY
-    a.actor_id,
     a.first_name,
     a.last_name,
     f.release_year
 HAVING MIN(f2.release_year) IS NOT NULL
 ORDER BY
-    a.actor_id ASC,
+    a.last_name ASC,
+    a.first_name ASC,
     MIN(f2.release_year) - f.release_year DESC;
 
 -- V2.1 - b) Subquery Solution
 SELECT 
-    a.actor_id,
     a.first_name,
     a.last_name,
     seq_film_sq.release_year AS current_release_year, 
@@ -765,7 +728,8 @@ FROM (
 INNER JOIN actor a 
     ON a.actor_id = seq_film_sq.actor_id 
 ORDER BY
-    a.actor_id ASC,
+    a.last_name ASC,
+    a.first_name ASC,
     seq_film_sq.gap_between_sequential_films DESC;
 
 -- V2.1 c) CTE Solution
@@ -789,7 +753,6 @@ WITH seq_film_cte AS(
     HAVING MIN(f2.release_year) IS NOT NULL
 )
 SELECT 
-    a.actor_id,
     a.first_name,
     a.last_name,
     seq_film_cte.release_year AS current_release_year, 
@@ -798,7 +761,9 @@ SELECT
 FROM seq_film_cte
 INNER JOIN actor a 
     ON a.actor_id = seq_film_cte.actor_id 
-ORDER BY
+ORDER by
+	a.last_name ASC,
+    a.first_name ASC,
     seq_film_cte.gap_between_sequential_films DESC;
 
 -- V2.2 -- Expected outcome: for each actor we want to be able to see aonly the biggest gap in his/hers carrer and then sort them descending
@@ -826,7 +791,6 @@ ORDER BY
 
 -- V2.2 - b) Subquery Solution
 SELECT 
-    a.actor_id,
     a.first_name,
     a.last_name,
     MAX(seq_film_sq.gap_between_sequential_films) AS max_gap
@@ -852,7 +816,6 @@ FROM (
 INNER JOIN actor a 
     ON a.actor_id = seq_film_sq.actor_id
 group by
-	a.actor_id,
     a.first_name,
     a.last_name
 ORDER by MAX(seq_film_sq.gap_between_sequential_films) DESC;
@@ -878,15 +841,13 @@ WITH seq_film_cte2 AS(
     HAVING MIN(f2.release_year) IS NOT NULL
 )
 SELECT 
-    a.actor_id,
     a.first_name,
     a.last_name,
     MAX(seq_film_cte2.gap_between_sequential_films) AS max_gap
 FROM seq_film_cte2
 INNER JOIN public.actor a 
     ON a.actor_id = seq_film_cte2.actor_id 
-group by
-	a.actor_id,
+GROUP BY
     a.first_name,
     a.last_name
 ORDER BY
