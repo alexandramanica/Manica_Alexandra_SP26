@@ -43,24 +43,53 @@ INSERT INTO public.film (
     rating
 )
 SELECT
-    UPPER('Barbie'),
-    'Barbie is a vibrant and subversive film that follows Barbie and Ken as they leave their perfect world of Barbieland to explore the complexities of the real world, confronting issues of identity, patriarchy, and self-discovery.',
-    2023,
-    (SELECT language_id FROM public.language l WHERE UPPER(l.name) = 'ENGLISH' LIMIT 1), 
-    7,      
-    4.99,   
-    117,    
-    19.99,  
-    'PG-13'
-WHERE NOT EXISTS (
-    SELECT 1                        
-    FROM public.film f
-    WHERE UPPER(f.title) = UPPER('Barbie')
-      AND f.release_year = 2023
-)
-RETURNING *;
+    temp_table.title,
+    temp_table.description,
+    temp_table.release_year,
+    temp_table.language_id,
+    temp_table.rental_duration,
+    temp_table.rental_rate,
+    temp_table.length,
+    temp_table.replacement_cost,
+    temp_table.rating
+FROM (
+    SELECT
+        UPPER('Barbie'),
+        'Barbie is a vibrant and subversive film that follows Barbie and Ken as they leave their perfect world of Barbieland to explore the complexities of the real world, confronting issues of identity, patriarchy, and self-discovery.',
+        2023,
+        (SELECT language_id FROM public.language WHERE UPPER(name) = 'ENGLISH' LIMIT 1),
+        7,
+        4.99,
+        117,
+        19.99,
+        'PG-13'::mpaa_rating
 
-INSERT INTO public.film (
+    UNION ALL
+
+    SELECT
+        UPPER('Fight Club'),
+        'Fight Club follows an insomniac office worker who forms an underground fight club with a charismatic soap salesman, only to discover his alter ego is orchestrating a nationwide anarchist plot.',
+        1999,
+        (SELECT language_id FROM public.language WHERE UPPER(name) = 'ENGLISH' LIMIT 1),
+        14,
+        9.99,
+        139,
+        17.99,
+        'R'::mpaa_rating
+
+    UNION ALL
+
+    SELECT
+        UPPER('Dune: Part One'),
+        'Dune follows Paul Atreides, heir to House Atreides, as he navigates political intrigue and betrayal on the desert planet Arrakis, the only source of the valuable spice melange.',
+        2021,
+        (SELECT language_id FROM public.language WHERE UPPER(name) = 'ENGLISH' LIMIT 1),
+        21,
+        19.99,
+        155,
+        18.99,
+        'PG-13'::mpaa_rating
+) temp_table (
     title,
     description,
     release_year,
@@ -71,52 +100,12 @@ INSERT INTO public.film (
     replacement_cost,
     rating
 )
-SELECT
-    UPPER('Fight Club'),
-    'Fight Club follows an insomniac office worker who forms an underground fight club with a charismatic soap salesman, only to discover his alter ego is orchestrating a nationwide anarchist plot.',
-    1999,
-    (SELECT language_id FROM public.language l WHERE UPPER(l.name) = 'ENGLISH' LIMIT 1), 
-    14,      
-    9.99,   
-    139,    
-    17.99,  
-    'R'
 WHERE NOT EXISTS (
-    SELECT 1                        
+    SELECT 1
     FROM public.film f
-    WHERE UPPER(f.title) = UPPER('Fight Club')
-      AND f.release_year = 1999
-)
-RETURNING *;
-
-INSERT INTO public.film (
-    title,
-    description,
-    release_year,
-    language_id,
-    rental_duration,
-    rental_rate,
-    length,
-    replacement_cost,
-    rating
-)
-SELECT
-    UPPER('Dune: Part One'),
-    'Dune follows Paul Atreides, heir to House Atreides, as he navigates political intrigue and betrayal on the desert planet Arrakis, the only source of the valuable spice melange.',
-    2021,
-    (SELECT language_id FROM public.language l WHERE UPPER(l.name) = 'ENGLISH' LIMIT 1), 
-    21,      
-    19.99,   
-    155,    
-    18.99,  
-    'PG-13'
-WHERE NOT EXISTS (
-    SELECT 1                        
-    FROM public.film f
-    WHERE UPPER(f.title) = UPPER('Dune: Part One')
-      AND f.release_year = 2021
-)
-RETURNING *;
+    WHERE UPPER(f.title) = UPPER(temp_table.title)
+      AND f.release_year = temp_table.release_year
+);
 
 COMMIT;
 
@@ -126,36 +115,56 @@ COMMIT;
 
 BEGIN;
 
-INSERT INTO public.film_category (film_id, category_id)
-SELECT
-    (SELECT f.film_id FROM public.film f WHERE UPPER(f.title) = UPPER('Barbie')),
-    (SELECT c.category_id FROM public.category c WHERE UPPER(c.name) = UPPER('Comedy'))
-WHERE NOT EXISTS (
-    SELECT 1 FROM public.film_category fc
-    WHERE fc.film_id = (SELECT f.film_id FROM public.film f WHERE UPPER(f.title) = UPPER('Barbie'))
-      AND fc.category_id = (SELECT c.category_id FROM public.category c WHERE UPPER(c.name) = UPPER('Comedy'))
+INSERT INTO public.film_category (
+    film_id,
+    category_id
 )
-RETURNING *;
-
-INSERT INTO public.film_category (film_id, category_id)
 SELECT
-    (SELECT f.film_id FROM public.film f WHERE UPPER(f.title) = UPPER('Fight Club')),
-    (SELECT c.category_id FROM public.category c WHERE UPPER(c.name) = UPPER('Drama'))
-WHERE NOT EXISTS (
-    SELECT 1 FROM public.film_category fc
-    WHERE fc.film_id = (SELECT f.film_id FROM public.film f WHERE UPPER(f.title) = UPPER('Fight Club'))
-      AND fc.category_id = (SELECT c.category_id FROM public.category c WHERE UPPER(c.name) = UPPER('Drama'))
+    temp_table.film_id,
+    temp_table.category_id
+FROM (
+    SELECT
+        (SELECT f.film_id
+         FROM public.film f
+         WHERE UPPER(f.title) = UPPER('Barbie')
+         LIMIT 1),
+        (SELECT c.category_id
+         FROM public.category c
+         WHERE UPPER(c.name) = UPPER('Comedy')
+         LIMIT 1)
+
+    UNION ALL
+
+    SELECT
+        (SELECT f.film_id
+         FROM public.film f
+         WHERE UPPER(f.title) = UPPER('Fight Club')
+         LIMIT 1),
+        (SELECT c.category_id
+         FROM public.category c
+         WHERE UPPER(c.name) = UPPER('Drama')
+         LIMIT 1)
+
+    UNION ALL
+
+    SELECT
+        (SELECT f.film_id
+         FROM public.film f
+         WHERE UPPER(f.title) = UPPER('Dune: Part One')
+         LIMIT 1),
+        (SELECT c.category_id
+         FROM public.category c
+         WHERE UPPER(c.name) = UPPER('Sci-Fi')
+         LIMIT 1)
+) temp_table (
+    film_id,
+    category_id
 )
-RETURNING *;
-
-INSERT INTO public.film_category (film_id, category_id)
-SELECT
-    (SELECT f.film_id FROM public.film f WHERE UPPER(f.title) = UPPER('Dune: Part One')),
-    (SELECT c.category_id FROM public.category c WHERE UPPER(c.name) = UPPER('Sci-Fi'))
 WHERE NOT EXISTS (
-    SELECT 1 FROM public.film_category fc
-    WHERE fc.film_id = (SELECT f.film_id FROM public.film f WHERE UPPER(f.title) = UPPER('Dune: Part One'))
-      AND fc.category_id = (SELECT c.category_id FROM public.category c WHERE UPPER(c.name) = UPPER('Sci-Fi'))
+    SELECT 1
+    FROM public.film_category fc
+    WHERE fc.film_id = temp_table.film_id
+      AND fc.category_id = temp_table.category_id
 )
 RETURNING *;
 
@@ -184,112 +193,144 @@ WHERE UPPER(f.title) IN ('BARBIE', 'FIGHT CLUB', 'DUNE: PART ONE');
 --     All FKs always point to valid existing records — if IDs change, subqueries adapt automatically.
 
 -- Task 1.2.1. ACTORS SUBTASK
+
 BEGIN;
 
 INSERT INTO public.actor (first_name, last_name)
-SELECT UPPER('Edward'), UPPER('Norton')
-WHERE NOT EXISTS (
-    SELECT 1 FROM public.actor a
-    WHERE UPPER(a.first_name) = UPPER('Edward')
-      AND UPPER(a.last_name) = UPPER('Norton')
-)
-RETURNING *;
+SELECT
+    temp_table.first_name,
+    temp_table.last_name
+FROM (
+    SELECT UPPER('Edward'), UPPER('Norton')
 
-INSERT INTO public.actor (first_name, last_name)
-SELECT UPPER('Brad'), UPPER('Pitt')
-WHERE NOT EXISTS (
-    SELECT 1 FROM public.actor a
-    WHERE UPPER(a.first_name) = UPPER('Brad')
-      AND UPPER(a.last_name) = UPPER('Pitt')
-)
-RETURNING *;
+    UNION ALL
 
-INSERT INTO public.actor (first_name, last_name)
-SELECT UPPER('Margot'), UPPER('Robbie')
-WHERE NOT EXISTS (
-    SELECT 1 FROM public.actor a
-    WHERE UPPER(a.first_name) = UPPER('Margot')
-      AND UPPER(a.last_name) = UPPER('Robbie')
-)
-RETURNING *;
+    SELECT UPPER('Brad'), UPPER('Pitt')
 
-INSERT INTO public.actor (first_name, last_name)
-SELECT UPPER('Ryan'), UPPER('Gosling')
-WHERE NOT EXISTS (
-    SELECT 1 FROM public.actor a
-    WHERE UPPER(a.first_name) = UPPER('Ryan')
-      AND UPPER(a.last_name) = UPPER('Gosling')
-)
-RETURNING *;
+    UNION ALL
 
-INSERT INTO public.actor (first_name, last_name)
-SELECT UPPER('Timothee'), UPPER('Chalamet')
-WHERE NOT EXISTS (
-    SELECT 1 FROM public.actor a
-    WHERE UPPER(a.first_name) = UPPER('Timothee')
-      AND UPPER(a.last_name) = UPPER('Chalamet')
-)
-RETURNING *;
+    SELECT UPPER('Margot'), UPPER('Robbie')
 
-INSERT INTO public.actor (first_name, last_name)
-SELECT UPPER('Zendaya'), UPPER('Coleman')
+    UNION ALL
+
+    SELECT UPPER('Ryan'), UPPER('Gosling')
+
+    UNION ALL
+
+    SELECT UPPER('Timothee'), UPPER('Chalamet')
+
+    UNION ALL
+
+    SELECT UPPER('Zendaya'), UPPER('Coleman')
+) temp_table (
+    first_name,
+    last_name
+)
 WHERE NOT EXISTS (
-    SELECT 1 FROM public.actor a
-    WHERE UPPER(a.first_name) = UPPER('Zendaya')
-      AND UPPER(a.last_name) = UPPER('Coleman')
+    SELECT 1
+    FROM public.actor a
+    WHERE UPPER(a.first_name) = UPPER(temp_table.first_name)
+      AND UPPER(a.last_name) = UPPER(temp_table.last_name)
 )
 RETURNING *;
 
 COMMIT;
 
 -- Task 1.2.2. FILM_ACTOR SUBTASK
+
 BEGIN;
 
 INSERT INTO public.film_actor (actor_id, film_id)
 SELECT
-    (SELECT a.actor_id FROM public.actor a 
-    	WHERE UPPER(a.first_name) = UPPER('Margot') AND UPPER(a.last_name) = UPPER('Robbie')), 
-    (SELECT f.film_id FROM public.film f WHERE UPPER(f.title) = UPPER('Barbie') AND f.release_year = 2023)
-ON CONFLICT (actor_id, film_id) DO NOTHING
-RETURNING *;
+    temp_table.actor_id,
+    temp_table.film_id
+FROM (
+    SELECT
+        (SELECT a.actor_id
+         FROM public.actor a
+         WHERE UPPER(a.first_name) = UPPER('Margot')
+           AND UPPER(a.last_name) = UPPER('Robbie')
+         LIMIT 1),
+        (SELECT f.film_id
+         FROM public.film f
+         WHERE UPPER(f.title) = UPPER('Barbie')
+           AND f.release_year = 2023
+         LIMIT 1)
 
-INSERT INTO public.film_actor (actor_id, film_id)
-SELECT
-    (SELECT a.actor_id FROM public.actor a
-        WHERE UPPER(a.first_name) = UPPER('Ryan') AND UPPER(a.last_name) = UPPER('Gosling')),
-    (SELECT f.film_id FROM public.film f WHERE UPPER(f.title) = UPPER('Barbie') AND f.release_year = 2023)
-ON CONFLICT (actor_id, film_id) DO NOTHING
-RETURNING *;
+    UNION ALL
 
-INSERT INTO public.film_actor (actor_id, film_id)
-SELECT
-    (SELECT a.actor_id FROM public.actor a
-        WHERE UPPER(a.first_name) = UPPER('Edward') AND UPPER(a.last_name) = UPPER('Norton')),
-    (SELECT f.film_id FROM public.film f WHERE UPPER(f.title) = UPPER('Fight Club') AND f.release_year = 1999)
-ON CONFLICT (actor_id, film_id) DO NOTHING
-RETURNING *;
+    SELECT
+        (SELECT a.actor_id
+         FROM public.actor a
+         WHERE UPPER(a.first_name) = UPPER('Ryan')
+           AND UPPER(a.last_name) = UPPER('Gosling')
+         LIMIT 1),
+        (SELECT f.film_id
+         FROM public.film f
+         WHERE UPPER(f.title) = UPPER('Barbie')
+           AND f.release_year = 2023
+         LIMIT 1)
 
-INSERT INTO public.film_actor (actor_id, film_id)
-SELECT
-    (SELECT a.actor_id FROM public.actor a
-        WHERE UPPER(a.first_name) = UPPER('Brad') AND UPPER(a.last_name) = UPPER('Pitt')),
-    (SELECT f.film_id FROM public.film f WHERE UPPER(f.title) = UPPER('Fight Club') AND f.release_year = 1999)
-ON CONFLICT (actor_id, film_id) DO NOTHING
-RETURNING *;
+    UNION ALL
 
-INSERT INTO public.film_actor (actor_id, film_id)
-SELECT
-    (SELECT a.actor_id FROM public.actor a
-        WHERE UPPER(a.first_name) = UPPER('Timothee') AND UPPER(a.last_name) = UPPER('Chalamet')),
-    (SELECT f.film_id FROM public.film f WHERE UPPER(f.title) = UPPER('Dune: Part One') AND f.release_year = 2021)
-ON CONFLICT (actor_id, film_id) DO NOTHING
-RETURNING *;
+    SELECT
+        (SELECT a.actor_id
+         FROM public.actor a
+         WHERE UPPER(a.first_name) = UPPER('Edward')
+           AND UPPER(a.last_name) = UPPER('Norton')
+         LIMIT 1),
+        (SELECT f.film_id
+         FROM public.film f
+         WHERE UPPER(f.title) = UPPER('Fight Club')
+           AND f.release_year = 1999
+         LIMIT 1)
 
-INSERT INTO public.film_actor (actor_id, film_id)
-SELECT
-    (SELECT a.actor_id FROM public.actor a
-        WHERE UPPER(a.first_name) = UPPER('Zendaya') AND UPPER(a.last_name) = UPPER('Coleman')),
-    (SELECT f.film_id FROM public.film f WHERE UPPER(f.title) = UPPER('Dune: Part One') AND f.release_year = 2021)
+    UNION ALL
+
+    SELECT
+        (SELECT a.actor_id
+         FROM public.actor a
+         WHERE UPPER(a.first_name) = UPPER('Brad')
+           AND UPPER(a.last_name) = UPPER('Pitt')
+         LIMIT 1),
+        (SELECT f.film_id
+         FROM public.film f
+         WHERE UPPER(f.title) = UPPER('Fight Club')
+           AND f.release_year = 1999
+         LIMIT 1)
+
+    UNION ALL
+
+    SELECT
+        (SELECT a.actor_id
+         FROM public.actor a
+         WHERE UPPER(a.first_name) = UPPER('Timothee')
+           AND UPPER(a.last_name) = UPPER('Chalamet')
+         LIMIT 1),
+        (SELECT f.film_id
+         FROM public.film f
+         WHERE UPPER(f.title) = UPPER('Dune: Part One')
+           AND f.release_year = 2021
+         LIMIT 1)
+
+    UNION ALL
+
+    SELECT
+        (SELECT a.actor_id
+         FROM public.actor a
+         WHERE UPPER(a.first_name) = UPPER('Zendaya')
+           AND UPPER(a.last_name) = UPPER('Coleman')
+         LIMIT 1),
+        (SELECT f.film_id
+         FROM public.film f
+         WHERE UPPER(f.title) = UPPER('Dune: Part One')
+           AND f.release_year = 2021
+         LIMIT 1)
+) temp_table (
+    actor_id,
+    film_id
+)
+WHERE temp_table.actor_id IS NOT null AND temp_table.film_id IS NOT NULL
 ON CONFLICT (actor_id, film_id) DO NOTHING
 RETURNING *;
 
@@ -328,37 +369,62 @@ WHERE UPPER(f.title) IN ('BARBIE', 'FIGHT CLUB', 'DUNE: PART ONE');
 
 BEGIN;
 
-INSERT INTO public.inventory (film_id, store_id)
-SELECT
-    (SELECT f.film_id FROM public.film f WHERE UPPER(f.title) = UPPER('Barbie') AND f.release_year = 2023),
-    (SELECT s.store_id FROM public.store s ORDER BY s.store_id LIMIT 1)
-WHERE NOT EXISTS (
-    SELECT 1 FROM public.inventory i
-    WHERE i.film_id = (SELECT f.film_id FROM public.film f WHERE UPPER(f.title) = UPPER('Barbie') AND f.release_year = 2023)
-      AND i.store_id = (SELECT s.store_id FROM public.store s ORDER BY s.store_id LIMIT 1)
+INSERT INTO public.inventory (
+    film_id,
+    store_id
 )
-RETURNING *;
+SELECT
+    temp_table.film_id,
+    temp_table.store_id
+FROM (
+    SELECT
+        (SELECT f.film_id
+         FROM public.film f
+         WHERE UPPER(f.title) = UPPER('Barbie')
+           AND f.release_year = 2023
+         LIMIT 1),
+        (SELECT s.store_id
+         FROM public.store s
+         ORDER BY s.store_id
+         LIMIT 1)
 
-INSERT INTO public.inventory (film_id, store_id)
-SELECT
-    (SELECT f.film_id FROM public.film f WHERE UPPER(f.title) = UPPER('Fight Club') AND f.release_year = 1999),
-    (SELECT s.store_id FROM public.store s ORDER BY s.store_id LIMIT 1)
-WHERE NOT EXISTS (
-    SELECT 1 FROM public.inventory i
-    WHERE i.film_id = (SELECT f.film_id FROM public.film f WHERE UPPER(f.title) = UPPER('Fight Club') AND f.release_year = 1999)
-      AND i.store_id = (SELECT s.store_id FROM public.store s ORDER BY s.store_id LIMIT 1)
-)
-RETURNING *;
+    UNION ALL
 
-INSERT INTO public.inventory (film_id, store_id)
-SELECT
-    (SELECT f.film_id FROM public.film f WHERE UPPER(f.title) = UPPER('Dune: Part One') AND f.release_year = 2021),
-    (SELECT s.store_id FROM public.store s ORDER BY s.store_id LIMIT 1)
-WHERE NOT EXISTS (
-    SELECT 1 FROM public.inventory i
-    WHERE i.film_id = (SELECT f.film_id FROM public.film f WHERE UPPER(f.title) = UPPER('Dune: Part One') AND f.release_year = 2021)
-      AND i.store_id = (SELECT s.store_id FROM public.store s ORDER BY s.store_id LIMIT 1)
+    SELECT
+        (SELECT f.film_id
+         FROM public.film f
+         WHERE UPPER(f.title) = UPPER('Fight Club')
+           AND f.release_year = 1999
+         LIMIT 1),
+        (SELECT s.store_id
+         FROM public.store s
+         ORDER BY s.store_id
+         LIMIT 1)
+
+    UNION ALL
+
+    SELECT
+        (SELECT f.film_id
+         FROM public.film f
+         WHERE UPPER(f.title) = UPPER('Dune: Part One')
+           AND f.release_year = 2021
+         LIMIT 1),
+        (SELECT s.store_id
+         FROM public.store s
+         ORDER BY s.store_id
+         LIMIT 1)
+) temp_table (
+    film_id,
+    store_id
 )
+WHERE temp_table.film_id IS NOT NULL
+  AND temp_table.store_id IS NOT NULL
+  AND NOT EXISTS (
+      SELECT 1
+      FROM public.inventory i
+      WHERE i.film_id = temp_table.film_id
+        AND i.store_id = temp_table.store_id
+  )
 RETURNING *;
 
 COMMIT;
@@ -395,8 +461,8 @@ GROUP BY
     c.last_name, 
     c.address_id, 
     c.store_id
-HAVING COUNT(DISTINCT p.payment_id) > 43 
-   AND COUNT(DISTINCT r.rental_id) > 43
+HAVING COUNT(DISTINCT p.payment_id) >= 43 
+   AND COUNT(DISTINCT r.rental_id) >= 43
 ORDER BY c.customer_id asc
 LIMIT 1;
 
@@ -406,7 +472,7 @@ UPDATE public.customer
 SET
     first_name = 'ALEXANDRA',
     last_name = 'MANICA',
-    email = 'alexandra.manica24@gmail.com',
+    email = 'alexandra.manica@gmail.com',
     address_id = (SELECT a.address_id FROM public.address a ORDER BY a.address_id LIMIT 1),
     active = 1
 WHERE customer_id = (
@@ -416,8 +482,8 @@ WHERE customer_id = (
     INNER JOIN public.payment p ON c.customer_id = p.customer_id
     WHERE c.store_id = (SELECT s.store_id FROM public.store s ORDER BY s.store_id LIMIT 1)
     GROUP BY c.customer_id
-    HAVING COUNT(DISTINCT p.payment_id) > 43
-       AND COUNT(DISTINCT r.rental_id) > 43
+    HAVING COUNT(DISTINCT p.payment_id) >= 43
+       AND COUNT(DISTINCT r.rental_id) >= 43
     ORDER BY c.customer_id
     LIMIT 1
 )
@@ -461,23 +527,31 @@ WHERE c.first_name  = 'ALEXANDRA' and c.last_name = 'MANICA';
 
 BEGIN;
 
-DELETE FROM public.rental
-WHERE "customer_id" = (
-    SELECT c.customer_id FROM public.customer c
-    WHERE c.first_name = 'ALEXANDRA' 
-      AND c.last_name = 'MANICA'
-    LIMIT 1
+WITH deleted_payments AS (
+    DELETE FROM public.payment p
+    WHERE p.customer_id = (
+        SELECT c.customer_id
+        FROM public.customer c
+        WHERE c.first_name = 'ALEXANDRA'
+          AND c.last_name = 'MANICA'
+        LIMIT 1
+    )
+    RETURNING 'payment_table' AS table_name, p.payment_id AS id
+),
+deleted_rentals AS (
+    DELETE FROM public.rental r
+    WHERE r.customer_id = (
+        SELECT c.customer_id
+        FROM public.customer c
+        WHERE c.first_name = 'ALEXANDRA'
+          AND c.last_name = 'MANICA'
+        LIMIT 1
+    )
+    RETURNING 'rental_table' AS table_name, r.rental_id AS id
 )
-RETURNING *;
-
-DELETE FROM public.payment
-WHERE "customer_id" = (
-    SELECT c.customer_id FROM public.customer c
-    WHERE c.first_name = 'ALEXANDRA' 
-      AND c.last_name = 'MANICA'
-    LIMIT 1
-)
-RETURNING *;
+SELECT * FROM deleted_payments
+UNION ALL
+SELECT * FROM deleted_rentals;
 
 COMMIT;
 
@@ -502,98 +576,105 @@ COMMIT;
 
 BEGIN;
 
-INSERT INTO public.rental (rental_date, inventory_id, customer_id, staff_id, return_date)
-SELECT
-    make_timestamptz(2017, 1, 15, 11, 30, 0, 'Europe/Bucharest'),
-    (SELECT i.inventory_id
-     FROM public.inventory i
-     JOIN public.film f 
-     	ON i.film_id = f.film_id
-     WHERE UPPER(f.title) = UPPER('Barbie')
-     	AND i.store_id = (SELECT s.store_id 
-     					  FROM public.store s 
-     					  ORDER BY s.store_id 
-     					  LIMIT 1)
-     LIMIT 1),                                        
-    (SELECT c.customer_id
-     FROM public.customer c
-     WHERE c.first_name = 'ALEXANDRA'
-       AND c.last_name = 'MANICA'
-     LIMIT 1),
-    (SELECT MIN(s.staff_id) FROM public.staff s),
-    make_timestamptz(2017, 1, 29, 10, 30, 0, 'Europe/Bucharest')
-WHERE NOT EXISTS (
-    SELECT 1 FROM public.rental r
-    WHERE r.inventory_id = (
-        SELECT i.inventory_id
-        FROM public.inventory i                      
-        JOIN public.film f ON i.film_id = f.film_id
-        WHERE UPPER(f.title) = UPPER('Barbie')
-        AND i.store_id = (SELECT s.store_id 
-     					  FROM public.store s 
-     					  ORDER BY s.store_id 
-     					  LIMIT 1)
-        LIMIT 1
-    )
-    AND r.return_date IS NULL                   
+INSERT INTO public.rental (
+    rental_date,
+    inventory_id,
+    customer_id,
+    staff_id,
+    return_date
 )
-RETURNING *;
-
-INSERT INTO public.rental (rental_date, inventory_id, customer_id, staff_id, return_date)
 SELECT
-    make_timestamptz(2017, 1, 16, 16, 30, 0, 'Europe/Bucharest'),
-    (SELECT i.inventory_id
-     FROM public.inventory i
-     JOIN public.film f ON i.film_id = f.film_id
-     WHERE UPPER(f.title) = UPPER('Fight Club')
-     LIMIT 1),
-    (SELECT c.customer_id
-     FROM public.customer c
-     WHERE c.first_name = 'ALEXANDRA'
-       AND c.last_name = 'MANICA'
-     LIMIT 1),
-    (SELECT MIN(s.staff_id) FROM public.staff s),
-    make_timestamptz(2017, 1, 30, 18, 30, 0, 'Europe/Bucharest')
-WHERE NOT EXISTS (
-    SELECT 1
-    FROM public.rental r
-    WHERE r.inventory_id = (
-        SELECT i.inventory_id
-        FROM public.inventory i
-        JOIN public.film f ON i.film_id = f.film_id
-        WHERE UPPER(f.title) = UPPER('Fight Club')
-        LIMIT 1
-    )
-    AND r.return_date IS NULL
+    temp_table.rental_date,
+    temp_table.inventory_id,
+    temp_table.customer_id,
+    temp_table.staff_id,
+    temp_table.return_date
+FROM (
+    SELECT
+        make_timestamptz(2017, 1, 15, 11, 30, 0, 'Europe/Bucharest'),
+        (
+            SELECT i.inventory_id
+            FROM public.inventory i
+            JOIN public.film f
+                ON i.film_id = f.film_id
+            WHERE UPPER(f.title) = UPPER('Barbie')
+              AND i.store_id = (
+                  SELECT s.store_id
+                  FROM public.store s
+                  ORDER BY s.store_id
+                  LIMIT 1
+              )
+            LIMIT 1
+        ),
+        (
+            SELECT c.customer_id
+            FROM public.customer c
+            WHERE c.first_name = 'ALEXANDRA'
+              AND c.last_name = 'MANICA'
+            LIMIT 1
+        ),
+        (SELECT MIN(s.staff_id) FROM public.staff s),
+        make_timestamptz(2017, 1, 29, 10, 30, 0, 'Europe/Bucharest')
+
+    UNION ALL
+
+    SELECT
+        make_timestamptz(2017, 1, 16, 16, 30, 0, 'Europe/Bucharest'),
+        (
+            SELECT i.inventory_id
+            FROM public.inventory i
+            JOIN public.film f
+                ON i.film_id = f.film_id
+            WHERE UPPER(f.title) = UPPER('Fight Club')
+            LIMIT 1
+        ),
+        (
+            SELECT c.customer_id
+            FROM public.customer c
+            WHERE c.first_name = 'ALEXANDRA'
+              AND c.last_name = 'MANICA'
+            LIMIT 1
+        ),
+        (SELECT MIN(s.staff_id) FROM public.staff s),
+        make_timestamptz(2017, 1, 30, 18, 30, 0, 'Europe/Bucharest')
+
+    UNION ALL
+
+    SELECT
+        make_timestamptz(2017, 1, 1, 14, 30, 0, 'Europe/Bucharest'),
+        (
+            SELECT i.inventory_id
+            FROM public.inventory i
+            JOIN public.film f
+                ON i.film_id = f.film_id
+            WHERE UPPER(f.title) = UPPER('Dune: Part One')
+            LIMIT 1
+        ),
+        (
+            SELECT c.customer_id
+            FROM public.customer c
+            WHERE c.first_name = 'ALEXANDRA'
+              AND c.last_name = 'MANICA'
+            LIMIT 1
+        ),
+        (SELECT MIN(s.staff_id) FROM public.staff s),
+        make_timestamptz(2017, 1, 22, 16, 30, 0, 'Europe/Bucharest')
+) temp_table (
+    rental_date,
+    inventory_id,
+    customer_id,
+    staff_id,
+    return_date
 )
-RETURNING *;
-
-INSERT INTO public.rental (rental_date, inventory_id, customer_id, staff_id, return_date)
-SELECT
-    make_timestamptz(2017, 1, 1, 14, 30, 0, 'Europe/Bucharest'),
-    (SELECT i.inventory_id
-     FROM public.inventory i
-     JOIN public.film f ON i.film_id = f.film_id
-     WHERE UPPER(f.title) = UPPER('Dune: Part One')
-     LIMIT 1),
-    (SELECT c.customer_id
-     FROM public.customer c
-     WHERE c.first_name = 'ALEXANDRA'
-       AND c.last_name = 'MANICA'
-     LIMIT 1),
-    (SELECT MIN(s.staff_id) FROM public.staff s),
-    make_timestamptz(2017, 1, 22, 16, 30, 0, 'Europe/Bucharest')
-WHERE NOT EXISTS (
-    SELECT 1
+WHERE temp_table.inventory_id IS NOT NULL
+  AND temp_table.customer_id IS NOT NULL
+  AND temp_table.staff_id IS NOT NULL
+  AND NOT EXISTS (
+  	SELECT 1
     FROM public.rental r
-    WHERE r.inventory_id = (
-        SELECT i.inventory_id
-        FROM public.inventory i
-        JOIN public.film f ON i.film_id = f.film_id
-        WHERE UPPER(f.title) = UPPER('Dune: Part One')
-        LIMIT 1
-    )
-    AND r.return_date IS NULL
+    WHERE r.inventory_id = temp_table.inventory_id
+    	AND r.customer_id = temp_table.customer_id
+      	AND r.rental_date = temp_table.rental_date
 )
 RETURNING *;
 
@@ -623,146 +704,157 @@ ORDER BY r.rental_date;
 
 BEGIN;
 
-INSERT INTO public.payment (customer_id, staff_id, rental_id, amount, payment_date)
-SELECT                                                        
-    (SELECT c.customer_id
-     FROM public.customer c
-     WHERE c.first_name = 'ALEXANDRA'
-       AND c.last_name = 'MANICA'
-     LIMIT 1),
-    (SELECT MIN(s.staff_id) FROM public.staff s),
-    (SELECT r.rental_id
-     FROM public.rental r
-     WHERE r.customer_id = (
-         SELECT c.customer_id FROM public.customer c
-         WHERE c.first_name = 'ALEXANDRA'
-           AND c.last_name = 'MANICA'
-         LIMIT 1)
-       AND r.inventory_id = (
-         SELECT i.inventory_id
-         FROM public.inventory i
-         JOIN public.film f ON i.film_id = f.film_id
-         WHERE UPPER(f.title) = UPPER('Barbie')
-           AND i.store_id = (SELECT s.store_id FROM public.store s ORDER BY s.store_id LIMIT 1)
-         LIMIT 1)
-     LIMIT 1),
-    4.99,                                                     
-    make_timestamptz(2017, 1, 29, 10, 33, 0, 'Europe/Bucharest') 
-WHERE NOT EXISTS (
-    SELECT 1 FROM public.payment p
-    WHERE p.rental_id = (                                     
-        SELECT r.rental_id
-        FROM public.rental r
-        WHERE r.customer_id = (
-            SELECT c.customer_id FROM public.customer c
-            WHERE c.first_name = 'ALEXANDRA'
-              AND c.last_name = 'MANICA'
-            LIMIT 1)
-          AND r.inventory_id = (
-            SELECT i.inventory_id
-            FROM public.inventory i
-            JOIN public.film f ON i.film_id = f.film_id
-            WHERE UPPER(f.title) = UPPER('Barbie')
-              AND i.store_id = (SELECT s.store_id FROM public.store s ORDER BY s.store_id LIMIT 1)
-            LIMIT 1)
-        LIMIT 1)
+INSERT INTO public.payment (
+    customer_id,
+    staff_id,
+    rental_id,
+    amount,
+    payment_date
 )
-RETURNING *;
-
-INSERT INTO public.payment (customer_id, staff_id, rental_id, amount, payment_date)
 SELECT
-    (SELECT c.customer_id
-     FROM public.customer c
-     WHERE c.first_name = 'ALEXANDRA'
-       AND c.last_name = 'MANICA'
-     LIMIT 1),
-    (SELECT MIN(s.staff_id) FROM public.staff s),
-    (SELECT r.rental_id
-     FROM public.rental r
-     WHERE r.customer_id = (
-         SELECT c.customer_id FROM public.customer c
-         WHERE c.first_name = 'ALEXANDRA'
-           AND c.last_name = 'MANICA'
-         LIMIT 1)
-       AND r.inventory_id = (
-         SELECT i.inventory_id
-         FROM public.inventory i
-         JOIN public.film f ON i.film_id = f.film_id
-         WHERE UPPER(f.title) = UPPER('Fight Club')
-           AND i.store_id = (SELECT s.store_id FROM public.store s ORDER BY s.store_id LIMIT 1)
-         LIMIT 1)
-     LIMIT 1),
-    9.99,
-    make_timestamptz(2017, 1, 30, 18, 31, 0, 'Europe/Bucharest')
-WHERE NOT EXISTS (
-    SELECT 1 FROM public.payment p
-    WHERE p.rental_id = (
-        SELECT r.rental_id
-        FROM public.rental r
-        WHERE r.customer_id = (
-            SELECT c.customer_id FROM public.customer c
+    temp_table.customer_id,
+    temp_table.staff_id,
+    temp_table.rental_id,
+    temp_table.amount,
+    temp_table.payment_date
+FROM (
+    SELECT
+        (
+            SELECT c.customer_id
+            FROM public.customer c
             WHERE c.first_name = 'ALEXANDRA'
               AND c.last_name = 'MANICA'
-            LIMIT 1)
-          AND r.inventory_id = (
-            SELECT i.inventory_id
-            FROM public.inventory i
-            JOIN public.film f ON i.film_id = f.film_id
-            WHERE UPPER(f.title) = UPPER('Fight Club')
-              AND i.store_id = (SELECT s.store_id FROM public.store s ORDER BY s.store_id LIMIT 1)
-            LIMIT 1)
-        LIMIT 1)
-)
-RETURNING *;
+            LIMIT 1
+        ),
+        (SELECT MIN(s.staff_id) FROM public.staff s),
+        (
+            SELECT r.rental_id
+            FROM public.rental r
+            WHERE r.customer_id = (
+                SELECT c.customer_id
+                FROM public.customer c
+                WHERE c.first_name = 'ALEXANDRA'
+                  AND c.last_name = 'MANICA'
+                LIMIT 1
+            )
+              AND r.inventory_id = (
+                  SELECT i.inventory_id
+                  FROM public.inventory i
+                  JOIN public.film f
+                    ON i.film_id = f.film_id
+                  WHERE UPPER(f.title) = UPPER('Barbie')
+                    AND i.store_id = (
+                        SELECT s.store_id
+                        FROM public.store s
+                        ORDER BY s.store_id
+                        LIMIT 1
+                    )
+                  LIMIT 1
+              )
+            LIMIT 1
+        ),
+        4.99,
+        make_timestamptz(2017, 1, 29, 10, 33, 0, 'Europe/Bucharest')
 
+    UNION ALL
 
-INSERT INTO public.payment (customer_id, staff_id, rental_id, amount, payment_date)
-SELECT
-    (SELECT c.customer_id
-     FROM public.customer c
-     WHERE c.first_name = 'ALEXANDRA'
-       AND c.last_name = 'MANICA'
-     LIMIT 1),
-    (SELECT MIN(s.staff_id) FROM public.staff s),
-    (SELECT r.rental_id
-     FROM public.rental r
-     WHERE r.customer_id = (
-         SELECT c.customer_id FROM public.customer c
-         WHERE c.first_name = 'ALEXANDRA'
-           AND c.last_name = 'MANICA'
-         LIMIT 1)
-       AND r.inventory_id = (
-         SELECT i.inventory_id
-         FROM public.inventory i
-         JOIN public.film f ON i.film_id = f.film_id
-         WHERE UPPER(f.title) = UPPER('Dune: Part One')
-           AND i.store_id = (SELECT s.store_id FROM public.store s ORDER BY s.store_id LIMIT 1)
-         LIMIT 1)
-     LIMIT 1),
-    19.99,
-    make_timestamptz(2017, 1, 22, 16, 33, 0, 'Europe/Bucharest')
-WHERE NOT EXISTS (
-    SELECT 1 FROM public.payment p
-    WHERE p.rental_id = (
-        SELECT r.rental_id
-        FROM public.rental r
-        WHERE r.customer_id = (
-            SELECT c.customer_id FROM public.customer c
+    SELECT
+        (
+            SELECT c.customer_id
+            FROM public.customer c
             WHERE c.first_name = 'ALEXANDRA'
               AND c.last_name = 'MANICA'
-            LIMIT 1)
-          AND r.inventory_id = (
-            SELECT i.inventory_id
-            FROM public.inventory i
-            JOIN public.film f ON i.film_id = f.film_id
-            WHERE UPPER(f.title) = UPPER('Dune: Part One')
-              AND i.store_id = (SELECT s.store_id FROM public.store s ORDER BY s.store_id LIMIT 1)
-            LIMIT 1)
-        LIMIT 1)
+            LIMIT 1
+        ),
+        (SELECT MIN(s.staff_id) FROM public.staff s),
+        (
+            SELECT r.rental_id
+            FROM public.rental r
+            WHERE r.customer_id = (
+                SELECT c.customer_id
+                FROM public.customer c
+                WHERE c.first_name = 'ALEXANDRA'
+                  AND c.last_name = 'MANICA'
+                LIMIT 1
+            )
+              AND r.inventory_id = (
+                  SELECT i.inventory_id
+                  FROM public.inventory i
+                  JOIN public.film f
+                    ON i.film_id = f.film_id
+                  WHERE UPPER(f.title) = UPPER('Fight Club')
+                    AND i.store_id = (
+                        SELECT s.store_id
+                        FROM public.store s
+                        ORDER BY s.store_id
+                        LIMIT 1
+                    )
+                  LIMIT 1
+              )
+            LIMIT 1
+        ),
+        9.99,
+        make_timestamptz(2017, 1, 30, 18, 31, 0, 'Europe/Bucharest')
+
+    UNION ALL
+
+    SELECT
+        (
+            SELECT c.customer_id
+            FROM public.customer c
+            WHERE c.first_name = 'ALEXANDRA'
+              AND c.last_name = 'MANICA'
+            LIMIT 1
+        ),
+        (SELECT MIN(s.staff_id) FROM public.staff s),
+        (
+            SELECT r.rental_id
+            FROM public.rental r
+            WHERE r.customer_id = (
+                SELECT c.customer_id
+                FROM public.customer c
+                WHERE c.first_name = 'ALEXANDRA'
+                  AND c.last_name = 'MANICA'
+                LIMIT 1
+            )
+              AND r.inventory_id = (
+                  SELECT i.inventory_id
+                  FROM public.inventory i
+                  JOIN public.film f
+                    ON i.film_id = f.film_id
+                  WHERE UPPER(f.title) = UPPER('Dune: Part One')
+                    AND i.store_id = (
+                        SELECT s.store_id
+                        FROM public.store s
+                        ORDER BY s.store_id
+                        LIMIT 1
+                    )
+                  LIMIT 1
+              )
+            LIMIT 1
+        ),
+        19.99,
+        make_timestamptz(2017, 1, 22, 16, 33, 0, 'Europe/Bucharest')
+) temp_table (
+    customer_id,
+    staff_id,
+    rental_id,
+    amount,
+    payment_date
 )
+WHERE temp_table.customer_id IS NOT NULL
+  AND temp_table.staff_id IS NOT NULL
+  AND temp_table.rental_id IS NOT NULL
+  AND NOT EXISTS (
+      SELECT 1
+      FROM public.payment p
+      WHERE p.rental_id = temp_table.rental_id
+  )
 RETURNING *;
 
 COMMIT;
+
+
 
 -- Check Query
 
