@@ -6,7 +6,7 @@
 
 -- CREATE DATABASE car_sharing_service_db;
 
-CREATE SCHEMA car_sharing_service_schema;
+CREATE SCHEMA IF NOT EXISTS  car_sharing_service_schema;
 
 CREATE EXTENSION IF NOT EXISTS btree_gist;
 
@@ -181,7 +181,13 @@ CREATE TABLE IF NOT EXISTS car_sharing_service_schema.reservation (
         CHECK (reserved_to > reserved_from),
     
     CONSTRAINT chk_reservation_created_before_start
-        CHECK (reserved_at <= reserved_from)
+        CHECK (reserved_at <= reserved_from),
+        
+    CONSTRAINT ex_reservation_vehicle_no_overlap
+        EXCLUDE USING gist (
+            vehicle_id WITH =,
+            tsrange(reserved_from, reserved_to, '[)') WITH &&
+        )
 );
 
 -- Table Maintenance
@@ -251,7 +257,13 @@ CREATE TABLE IF NOT EXISTS car_sharing_service_schema.trip (
         CHECK (ended_at IS NULL OR ended_at >= started_at),
 
     CONSTRAINT chk_trip_distance
-        CHECK (distance IS NULL OR distance >= 0)
+        CHECK (distance IS NULL OR distance >= 0),
+        
+    CONSTRAINT ex_trip_vehicle_no_overlap
+        EXCLUDE USING gist (
+            vehicle_id WITH =,
+            tsrange(started_at, COALESCE(ended_at, 'infinity'::timestamp), '[)') WITH &&
+        )
 );
 
 -- Table Payment
@@ -389,45 +401,46 @@ CREATE TABLE IF NOT EXISTS car_sharing_service_schema.vehicle_status_history (
 INSERT INTO car_sharing_service_schema.customer 
     (first_name, last_name, email, phone_number)
 VALUES 
-    ('IRINA', 'SMITH', 'ismith@gmail.com', '07675454897'),
-    ('IACOB', 'GREEN', 'igreen@gmail.com', '08973334121')
+    (UPPER('irina'), UPPER('smith'), LOWER('ismith@gmail.com'), '07675454897'),
+    (UPPER('iacob'), UPPER('green'), LOWER('igreen@gmail.com'), '08973334121')
 ON CONFLICT (email) DO NOTHING
 RETURNING *;
-
 
 -- Table 2 - Vehicle Type
 
 INSERT INTO car_sharing_service_schema.vehicle_type
     (vehicle_type_name, description, activation_fee, rate_per_km, rate_per_min)
 VALUES
-    ('ECO', 'Small electric vehicle', 3.00, 0.80, 0.20),
-    ('COMFORT', 'Premium comfort vehicle', 15.00, 1.30, 0.50)
+    (UPPER('eco'), UPPER('small electric vehicle'), 3.00, 0.80, 0.20),
+    (UPPER('comfort'), UPPER('premium comfort vehicle'), 15.00, 1.30, 0.50)
 ON CONFLICT (vehicle_type_name) DO NOTHING
 RETURNING *;
 
 -- Table 3 - Employee
 
 INSERT INTO car_sharing_service_schema.employee 
-	(manager_id, first_name, last_name, email, phone_number, hire_date, position)
+    (manager_id, first_name, last_name, email, phone_number, hire_date, position)
 VALUES
-	(NULL, 'ELENA', 'QUINCE', 'elena.quince@BSHARE.COM', '0732356567', DATE '2025-04-14', 'LEAD MECHANICAL ENGINEER'),
-    (NULL, 'MARIA', 'BONART', 'maria.bonart@BSHARE.COM', '0736768980', DATE '2024-03-14', 'LEAD INSPECTION ENGINEER')
+    (NULL, UPPER('elena'), UPPER('quince'), LOWER('elena.quince@BSHARE.COM'), '0732356567', DATE '2025-04-14', UPPER('lead mechanical engineer')),
+    (NULL, UPPER('maria'), UPPER('bonart'), LOWER('maria.bonart@BSHARE.COM'), '0736768980', DATE '2024-03-14', UPPER('lead inspection engineer'))
 ON CONFLICT (email) DO NOTHING
 RETURNING *;
 
 INSERT INTO car_sharing_service_schema.employee
     (manager_id, first_name, last_name, email, phone_number, hire_date, position)
 SELECT
-    (SELECT e.employee_id
-     FROM car_sharing_service_schema.employee e
-     WHERE e.position = 'LEAD MECHANICAL ENGINEER'
-     LIMIT 1),
-    'DARIUS',
-    'MAXIM',
-    'darius.maxim@BSHARE.COM',
+    (
+        SELECT e.employee_id
+        FROM car_sharing_service_schema.employee e
+        WHERE e.position = UPPER('lead mechanical engineer')
+        LIMIT 1
+    ),
+    UPPER('darius'),
+    UPPER('maxim'),
+    LOWER('darius.maxim@BSHARE.COM'),
     '0734585090',
     DATE '2026-02-14',
-    'INSPECTION ENGINEER'
+    UPPER('inspection engineer')
 ON CONFLICT (email) DO NOTHING
 RETURNING *;
 
@@ -436,12 +449,14 @@ RETURNING *;
 INSERT INTO car_sharing_service_schema.vehicle
     (vehicle_type_id, model_name, license_plate, manufacture_date)
 SELECT
-    (SELECT vt.vehicle_type_id
-	 FROM car_sharing_service_schema.vehicle_type vt
-     WHERE vt.vehicle_type_name = 'COMFORT'
-     LIMIT 1),
-    'AUDI A5',
-    'B705ERD',
+    (
+        SELECT vt.vehicle_type_id
+        FROM car_sharing_service_schema.vehicle_type vt
+        WHERE vt.vehicle_type_name = UPPER('comfort')
+        LIMIT 1
+    ),
+    UPPER('audi a5'),
+    UPPER('b705erd'),
     DATE '2024-12-12'
 ON CONFLICT (license_plate) DO NOTHING
 RETURNING *;
@@ -449,12 +464,14 @@ RETURNING *;
 INSERT INTO car_sharing_service_schema.vehicle
     (vehicle_type_id, model_name, license_plate, manufacture_date)
 SELECT
-    (SELECT vt.vehicle_type_id
-     FROM car_sharing_service_schema.vehicle_type vt
-     WHERE vt.vehicle_type_name = 'ECO'
-     LIMIT 1),
-    'TOYOTA PRIUS',
-    'DJ54AEM',
+    (
+        SELECT vt.vehicle_type_id
+        FROM car_sharing_service_schema.vehicle_type vt
+        WHERE vt.vehicle_type_name = UPPER('eco')
+        LIMIT 1
+    ),
+    UPPER('toyota prius'),
+    UPPER('dj54aem'),
     DATE '2022-10-22'
 ON CONFLICT (license_plate) DO NOTHING
 RETURNING *;
@@ -464,48 +481,56 @@ RETURNING *;
 INSERT INTO car_sharing_service_schema.reservation
     (customer_id, vehicle_id, reserved_at, reserved_from, reserved_to)
 SELECT
-    (SELECT c.customer_id
-     FROM car_sharing_service_schema.customer c
-     WHERE c.email = 'ismith@gmail.com'
-     LIMIT 1),
-    (SELECT v.vehicle_id
-     FROM car_sharing_service_schema.vehicle v
-     WHERE v.license_plate = 'B705ERD'
-     LIMIT 1),
+    (
+        SELECT c.customer_id
+        FROM car_sharing_service_schema.customer c
+        WHERE c.email = LOWER('ismith@gmail.com')
+        LIMIT 1
+    ),
+    (
+        SELECT v.vehicle_id
+        FROM car_sharing_service_schema.vehicle v
+        WHERE v.license_plate = UPPER('b705erd')
+        LIMIT 1
+    ),
     CURRENT_TIMESTAMP,
     TIMESTAMP '2026-07-12 10:00:00',
-	TIMESTAMP '2026-07-19 10:00:00'
+    TIMESTAMP '2026-07-19 10:00:00'
 WHERE NOT EXISTS (
     SELECT 1
     FROM car_sharing_service_schema.reservation r
     WHERE r.customer_id = (
               SELECT c.customer_id
               FROM car_sharing_service_schema.customer c
-              WHERE c.email = 'ismith@gmail.com'
+              WHERE c.email = LOWER('ismith@gmail.com')
               LIMIT 1
           )
-		AND r.vehicle_id = (
+      AND r.vehicle_id = (
               SELECT v.vehicle_id
               FROM car_sharing_service_schema.vehicle v
-              WHERE v.license_plate = 'B705ERD'
+              WHERE v.license_plate = UPPER('b705erd')
               LIMIT 1
           )
-		AND r.reserved_from = TIMESTAMP '2026-07-12 10:00:00'
-      	AND r.reserved_to = TIMESTAMP '2026-07-19 10:00:00'
+      AND r.reserved_from = TIMESTAMP '2026-07-12 10:00:00'
+      AND r.reserved_to = TIMESTAMP '2026-07-19 10:00:00'
 )
 RETURNING *;
 
 INSERT INTO car_sharing_service_schema.reservation
     (customer_id, vehicle_id, reserved_at, reserved_from, reserved_to)
 SELECT
-    (SELECT c.customer_id
-     FROM car_sharing_service_schema.customer c
-     WHERE c.email = 'igreen@gmail.com'
-     LIMIT 1),
-    (SELECT v.vehicle_id
-     FROM car_sharing_service_schema.vehicle v
-     WHERE v.license_plate = 'DJ54AEM'
-     LIMIT 1),
+    (
+        SELECT c.customer_id
+        FROM car_sharing_service_schema.customer c
+        WHERE c.email = LOWER('igreen@gmail.com')
+        LIMIT 1
+    ),
+    (
+        SELECT v.vehicle_id
+        FROM car_sharing_service_schema.vehicle v
+        WHERE v.license_plate = UPPER('dj54aem')
+        LIMIT 1
+    ),
     TIMESTAMP '2026-07-05 09:00:00',
     TIMESTAMP '2026-08-05 09:00:00',
     TIMESTAMP '2026-08-15 13:00:00'
@@ -515,13 +540,13 @@ WHERE NOT EXISTS (
     WHERE r.customer_id = (
               SELECT c.customer_id
               FROM car_sharing_service_schema.customer c
-              WHERE c.email = 'igreen@gmail.com'
+              WHERE c.email = LOWER('igreen@gmail.com')
               LIMIT 1
           )
       AND r.vehicle_id = (
               SELECT v.vehicle_id
               FROM car_sharing_service_schema.vehicle v
-              WHERE v.license_plate = 'DJ54AEM'
+              WHERE v.license_plate = UPPER('dj54aem')
               LIMIT 1
           )
       AND r.reserved_from = TIMESTAMP '2026-08-05 09:00:00'
@@ -534,66 +559,77 @@ RETURNING *;
 INSERT INTO car_sharing_service_schema.trip
     (vehicle_id, customer_id, reservation_id, distance, started_at, ended_at)
 SELECT
-    (SELECT v.vehicle_id
-     FROM car_sharing_service_schema.vehicle v
-     WHERE v.license_plate = 'B705ERD'
-     LIMIT 1),
-    (SELECT c.customer_id
-     FROM car_sharing_service_schema.customer c
-     WHERE c.email = 'ismith@gmail.com'
-     LIMIT 1),
-    (SELECT r.reservation_id
-     FROM car_sharing_service_schema.reservation r
-     WHERE r.customer_id = (
-               SELECT c.customer_id
-               FROM car_sharing_service_schema.customer c
-               WHERE c.email = 'ismith@gmail.com'
-               LIMIT 1
-           )
-       AND r.vehicle_id = (
-               SELECT v.vehicle_id
-               FROM car_sharing_service_schema.vehicle v
-               WHERE v.license_plate = 'B705ERD'
-               LIMIT 1
-           )
-       AND r.reserved_from = TIMESTAMP '2026-07-12 10:00:00'
-       AND r.reserved_to = TIMESTAMP '2026-07-19 10:00:00'
-     LIMIT 1),
+    (
+        SELECT v.vehicle_id
+        FROM car_sharing_service_schema.vehicle v
+        WHERE v.license_plate = UPPER('b705erd')
+        LIMIT 1
+    ),
+    (
+        SELECT c.customer_id
+        FROM car_sharing_service_schema.customer c
+        WHERE c.email = LOWER('ismith@gmail.com')
+        LIMIT 1
+    ),
+    (
+        SELECT r.reservation_id
+        FROM car_sharing_service_schema.reservation r
+        WHERE r.customer_id = (
+                  SELECT c.customer_id
+                  FROM car_sharing_service_schema.customer c
+                  WHERE c.email = LOWER('ismith@gmail.com')
+                  LIMIT 1
+              )
+          AND r.vehicle_id = (
+                  SELECT v.vehicle_id
+                  FROM car_sharing_service_schema.vehicle v
+                  WHERE v.license_plate = UPPER('b705erd')
+                  LIMIT 1
+              )
+          AND r.reserved_from = TIMESTAMP '2026-07-12 10:00:00'
+          AND r.reserved_to = TIMESTAMP '2026-07-19 10:00:00'
+        LIMIT 1
+    ),
     125.50,
     TIMESTAMP '2026-07-12 10:15:00',
     TIMESTAMP '2026-07-19 12:45:00'
 ON CONFLICT (reservation_id) DO NOTHING
 RETURNING *;
 
-
 INSERT INTO car_sharing_service_schema.trip
     (vehicle_id, customer_id, reservation_id, distance, started_at, ended_at)
 SELECT
-    (SELECT v.vehicle_id
-     FROM car_sharing_service_schema.vehicle v
-     WHERE v.license_plate = 'DJ54AEM'
-     LIMIT 1),
-    (SELECT c.customer_id
-     FROM car_sharing_service_schema.customer c
-     WHERE c.email = 'igreen@gmail.com'
-     LIMIT 1),
-    (SELECT r.reservation_id
-     FROM car_sharing_service_schema.reservation r
-     WHERE r.customer_id = (
-               SELECT c.customer_id
-               FROM car_sharing_service_schema.customer c
-               WHERE c.email = 'igreen@gmail.com'
-               LIMIT 1
-           )
-       AND r.vehicle_id = (
-               SELECT v.vehicle_id
-               FROM car_sharing_service_schema.vehicle v
-               WHERE v.license_plate = 'DJ54AEM'
-               LIMIT 1
-           )
-       AND r.reserved_from = TIMESTAMP '2026-08-05 09:00:00'
-       AND r.reserved_to = TIMESTAMP '2026-08-15 13:00:00'
-     LIMIT 1),
+    (
+        SELECT v.vehicle_id
+        FROM car_sharing_service_schema.vehicle v
+        WHERE v.license_plate = UPPER('dj54aem')
+        LIMIT 1
+    ),
+    (
+        SELECT c.customer_id
+        FROM car_sharing_service_schema.customer c
+        WHERE c.email = LOWER('igreen@gmail.com')
+        LIMIT 1
+    ),
+    (
+        SELECT r.reservation_id
+        FROM car_sharing_service_schema.reservation r
+        WHERE r.customer_id = (
+                  SELECT c.customer_id
+                  FROM car_sharing_service_schema.customer c
+                  WHERE c.email = LOWER('igreen@gmail.com')
+                  LIMIT 1
+              )
+          AND r.vehicle_id = (
+                  SELECT v.vehicle_id
+                  FROM car_sharing_service_schema.vehicle v
+                  WHERE v.license_plate = UPPER('dj54aem')
+                  LIMIT 1
+              )
+          AND r.reserved_from = TIMESTAMP '2026-08-05 09:00:00'
+          AND r.reserved_to = TIMESTAMP '2026-08-15 13:00:00'
+        LIMIT 1
+    ),
     78.25,
     TIMESTAMP '2026-08-05 09:10:00',
     TIMESTAMP '2026-08-15 11:40:00'
@@ -611,16 +647,15 @@ SELECT
         WHERE t.customer_id = (
                   SELECT c.customer_id
                   FROM car_sharing_service_schema.customer c
-                  WHERE c.email = 'ismith@gmail.com'
+                  WHERE c.email = LOWER('ismith@gmail.com')
               )
           AND t.started_at = TIMESTAMP '2026-07-12 10:15:00'
         LIMIT 1
     ),
     5,
-    'AMAZING EXPERIENCE'
+    UPPER('amazing experience')
 ON CONFLICT (trip_id) DO NOTHING
 RETURNING *;
-
 
 INSERT INTO car_sharing_service_schema.rating
     (trip_id, rating_score, rating_comment)
@@ -631,13 +666,13 @@ SELECT
         WHERE t.customer_id = (
                   SELECT c.customer_id
                   FROM car_sharing_service_schema.customer c
-                  WHERE c.email = 'igreen@gmail.com'
+                  WHERE c.email = LOWER('igreen@gmail.com')
               )
           AND t.started_at = TIMESTAMP '2026-08-05 09:10:00'
         LIMIT 1
     ),
     4,
-    'VERY GOOD TRIP'
+    UPPER('very good trip')
 ON CONFLICT (trip_id) DO NOTHING
 RETURNING *;
 
@@ -652,13 +687,13 @@ SELECT
         WHERE t.customer_id = (
                   SELECT c.customer_id
                   FROM car_sharing_service_schema.customer c
-                  WHERE c.email = 'ismith@gmail.com'
+                  WHERE c.email = LOWER('ismith@gmail.com')
               )
           AND t.started_at = TIMESTAMP '2026-07-12 10:15:00'
         LIMIT 1
     ),
     34.90,
-    'CARD',
+    UPPER('card'),
     TIMESTAMP '2026-07-19 12:50:00'
 WHERE NOT EXISTS (
     SELECT 1
@@ -669,13 +704,13 @@ WHERE NOT EXISTS (
               WHERE t.customer_id = (
                         SELECT c.customer_id
                         FROM car_sharing_service_schema.customer c
-                        WHERE c.email = 'ismith@gmail.com'
+                        WHERE c.email = LOWER('ismith@gmail.com')
                     )
                 AND t.started_at = TIMESTAMP '2026-07-12 10:15:00'
               LIMIT 1
           )
       AND p.payment_amount = 34.90
-      AND p.payment_method = 'CARD'
+      AND p.payment_method = UPPER('card')
       AND p.paid_at = TIMESTAMP '2026-07-19 12:50:00'
 )
 RETURNING *;
@@ -689,13 +724,13 @@ SELECT
         WHERE t.customer_id = (
                   SELECT c.customer_id
                   FROM car_sharing_service_schema.customer c
-                  WHERE c.email = 'igreen@gmail.com'
+                  WHERE c.email = LOWER('igreen@gmail.com')
               )
           AND t.started_at = TIMESTAMP '2026-08-05 09:10:00'
         LIMIT 1
     ),
     52.40,
-    'BANK_TRANSFER',
+    UPPER('bank_transfer'),
     TIMESTAMP '2026-08-15 12:50:00'
 WHERE NOT EXISTS (
     SELECT 1
@@ -706,29 +741,30 @@ WHERE NOT EXISTS (
               WHERE t.customer_id = (
                         SELECT c.customer_id
                         FROM car_sharing_service_schema.customer c
-                        WHERE c.email = 'igreen@gmail.com'
+                        WHERE c.email = LOWER('igreen@gmail.com')
                     )
                 AND t.started_at = TIMESTAMP '2026-08-05 09:10:00'
               LIMIT 1
           )
       AND p.payment_amount = 52.40
-      AND p.payment_method = 'BANK_TRANSFER'
+      AND p.payment_method = UPPER('bank_transfer')
       AND p.paid_at = TIMESTAMP '2026-08-15 12:50:00'
 )
 RETURNING *;
 
--- Table 9 - Maintence
+-- Table 9 - Maintenance
+
 INSERT INTO car_sharing_service_schema.maintenance
     (vehicle_id, maintenance_type, maintenance_details, created_at, closed_at)
 SELECT
     (
         SELECT v.vehicle_id
         FROM car_sharing_service_schema.vehicle v
-        WHERE v.license_plate = 'B705ERD'
+        WHERE v.license_plate = UPPER('b705erd')
         LIMIT 1
     ),
-    'INSPECTION',
-    'ANNUAL TECHNICAL INSPECTION',
+    UPPER('inspection'),
+    UPPER('annual technical inspection'),
     TIMESTAMP '2026-01-20 09:00:00',
     TIMESTAMP '2026-01-20 11:30:00'
 WHERE NOT EXISTS (
@@ -737,10 +773,10 @@ WHERE NOT EXISTS (
     WHERE m.vehicle_id = (
               SELECT v.vehicle_id
               FROM car_sharing_service_schema.vehicle v
-              WHERE v.license_plate = 'B705ERD'
+              WHERE v.license_plate = UPPER('b705erd')
               LIMIT 1
           )
-      AND m.maintenance_type = 'INSPECTION'
+      AND m.maintenance_type = UPPER('inspection')
       AND m.created_at = TIMESTAMP '2026-01-20 09:00:00'
 )
 RETURNING *;
@@ -751,11 +787,11 @@ SELECT
     (
         SELECT v.vehicle_id
         FROM car_sharing_service_schema.vehicle v
-        WHERE v.license_plate = 'DJ54AEM'
+        WHERE v.license_plate = UPPER('dj54aem')
         LIMIT 1
     ),
-    'REPAIR',
-    'BRAKE PADS REPAIR',
+    UPPER('repair'),
+    UPPER('brake pads repair'),
     TIMESTAMP '2026-02-20 10:00:00',
     TIMESTAMP '2026-02-20 16:00:00'
 WHERE NOT EXISTS (
@@ -764,10 +800,10 @@ WHERE NOT EXISTS (
     WHERE m.vehicle_id = (
               SELECT v.vehicle_id
               FROM car_sharing_service_schema.vehicle v
-              WHERE v.license_plate = 'DJ54AEM'
+              WHERE v.license_plate = UPPER('dj54aem')
               LIMIT 1
           )
-      AND m.maintenance_type = 'REPAIR'
+      AND m.maintenance_type = UPPER('repair')
       AND m.created_at = TIMESTAMP '2026-02-20 10:00:00'
 )
 RETURNING *;
@@ -780,7 +816,7 @@ SELECT
     (
         SELECT e.employee_id
         FROM car_sharing_service_schema.employee e
-        WHERE e.email = 'elena.quince@BSHARE.COM'
+        WHERE e.email = LOWER('elena.quince@BSHARE.COM')
     ),
     (
         SELECT m.maintenance_id
@@ -788,10 +824,10 @@ SELECT
         WHERE m.vehicle_id = (
                   SELECT v.vehicle_id
                   FROM car_sharing_service_schema.vehicle v
-                  WHERE v.license_plate = 'B705ERD'
+                  WHERE v.license_plate = UPPER('b705erd')
                   LIMIT 1
               )
-          AND m.maintenance_type = 'INSPECTION'
+          AND m.maintenance_type = UPPER('inspection')
           AND m.created_at = TIMESTAMP '2026-01-20 09:00:00'
         LIMIT 1
     ),
@@ -806,7 +842,7 @@ SELECT
     (
         SELECT e.employee_id
         FROM car_sharing_service_schema.employee e
-        WHERE e.email = 'maria.bonart@BSHARE.COM'
+        WHERE e.email = LOWER('maria.bonart@BSHARE.COM')
     ),
     (
         SELECT m.maintenance_id
@@ -814,10 +850,10 @@ SELECT
         WHERE m.vehicle_id = (
                   SELECT v.vehicle_id
                   FROM car_sharing_service_schema.vehicle v
-                  WHERE v.license_plate = 'DJ54AEM'
+                  WHERE v.license_plate = UPPER('dj54aem')
                   LIMIT 1
               )
-          AND m.maintenance_type = 'REPAIR'
+          AND m.maintenance_type = UPPER('repair')
           AND m.created_at = TIMESTAMP '2026-02-20 10:00:00'
         LIMIT 1
     ),
@@ -827,29 +863,30 @@ ON CONFLICT (employee_id, maintenance_id, assigned_at) DO NOTHING
 RETURNING *;
 
 -- Table 11 - Vehicle_status_history
+
 INSERT INTO car_sharing_service_schema.vehicle_status_history
     (vehicle_id, status, valid_from, valid_to, changed_reason)
 SELECT
     (
         SELECT v.vehicle_id
         FROM car_sharing_service_schema.vehicle v
-        WHERE v.license_plate = 'B705ERD'
+        WHERE v.license_plate = UPPER('b705erd')
         LIMIT 1
     ),
-    'AVAILABLE',
+    UPPER('available'),
     TIMESTAMP '2026-01-01 08:00:00',
     TIMESTAMP '2026-01-20 08:59:59',
-    'READY FOR CUSTOMER USE'
+    UPPER('ready for customer use')
 WHERE NOT EXISTS (
     SELECT 1
     FROM car_sharing_service_schema.vehicle_status_history vsh
     WHERE vsh.vehicle_id = (
               SELECT v.vehicle_id
               FROM car_sharing_service_schema.vehicle v
-              WHERE v.license_plate = 'B705ERD'
+              WHERE v.license_plate = UPPER('b705erd')
               LIMIT 1
           )
-      AND vsh.status = 'AVAILABLE'
+      AND vsh.status = UPPER('available')
       AND vsh.valid_from = TIMESTAMP '2026-01-01 08:00:00'
       AND vsh.valid_to = TIMESTAMP '2026-01-20 08:59:59'
 )
@@ -861,23 +898,23 @@ SELECT
     (
         SELECT v.vehicle_id
         FROM car_sharing_service_schema.vehicle v
-        WHERE v.license_plate = 'DJ54AEM'
+        WHERE v.license_plate = UPPER('dj54aem')
         LIMIT 1
     ),
-    'MAINTENANCE',
+    UPPER('maintenance'),
     TIMESTAMP '2026-02-20 10:00:00',
     TIMESTAMP '2026-02-20 16:00:00',
-    'BRAKE PADS REPAIR'
+    UPPER('brake pads repair')
 WHERE NOT EXISTS (
     SELECT 1
     FROM car_sharing_service_schema.vehicle_status_history vsh
     WHERE vsh.vehicle_id = (
               SELECT v.vehicle_id
               FROM car_sharing_service_schema.vehicle v
-              WHERE v.license_plate = 'DJ54AEM'
+              WHERE v.license_plate = UPPER('dj54aem')
               LIMIT 1
           )
-      AND vsh.status = 'MAINTENANCE'
+      AND vsh.status = UPPER('maintenance')
       AND vsh.valid_from = TIMESTAMP '2026-02-20 10:00:00'
       AND vsh.valid_to = TIMESTAMP '2026-02-20 16:00:00'
 )
@@ -888,38 +925,39 @@ RETURNING *;
 -- set the default value to current_date, and check to make sure the value has been set for the existing rows.
 
 -- Add record_ts to all tables
+
 ALTER TABLE car_sharing_service_schema.customer
-    ADD COLUMN record_ts DATE NOT NULL DEFAULT CURRENT_DATE;
+    ADD COLUMN IF NOT EXISTS record_ts DATE NOT NULL DEFAULT CURRENT_DATE;
 
 ALTER TABLE car_sharing_service_schema.vehicle_type
-    ADD COLUMN record_ts DATE NOT NULL DEFAULT CURRENT_DATE;
+    ADD COLUMN IF NOT EXISTS record_ts DATE NOT NULL DEFAULT CURRENT_DATE;
 
 ALTER TABLE car_sharing_service_schema.employee
-    ADD COLUMN record_ts DATE NOT NULL DEFAULT CURRENT_DATE;
+    ADD COLUMN IF NOT EXISTS record_ts DATE NOT NULL DEFAULT CURRENT_DATE;
 
 ALTER TABLE car_sharing_service_schema.vehicle
-    ADD COLUMN record_ts DATE NOT NULL DEFAULT CURRENT_DATE;
+    ADD COLUMN IF NOT EXISTS record_ts DATE NOT NULL DEFAULT CURRENT_DATE;
 
 ALTER TABLE car_sharing_service_schema.reservation
-    ADD COLUMN record_ts DATE NOT NULL DEFAULT CURRENT_DATE;
+    ADD COLUMN IF NOT EXISTS record_ts DATE NOT NULL DEFAULT CURRENT_DATE;
 
 ALTER TABLE car_sharing_service_schema.maintenance
-    ADD COLUMN record_ts DATE NOT NULL DEFAULT CURRENT_DATE;
+    ADD COLUMN IF NOT EXISTS record_ts DATE NOT NULL DEFAULT CURRENT_DATE;
 
 ALTER TABLE car_sharing_service_schema.trip
-    ADD COLUMN record_ts DATE NOT NULL DEFAULT CURRENT_DATE;
+    ADD COLUMN IF NOT EXISTS record_ts DATE NOT NULL DEFAULT CURRENT_DATE;
 
 ALTER TABLE car_sharing_service_schema.payment
-    ADD COLUMN record_ts DATE NOT NULL DEFAULT CURRENT_DATE;
+    ADD COLUMN IF NOT EXISTS record_ts DATE NOT NULL DEFAULT CURRENT_DATE;
 
 ALTER TABLE car_sharing_service_schema.rating
-    ADD COLUMN record_ts DATE NOT NULL DEFAULT CURRENT_DATE;
+    ADD COLUMN IF NOT EXISTS record_ts DATE NOT NULL DEFAULT CURRENT_DATE;
 
 ALTER TABLE car_sharing_service_schema.employee_maintenance_record
-    ADD COLUMN record_ts DATE NOT NULL DEFAULT CURRENT_DATE;
+    ADD COLUMN IF NOT EXISTS record_ts DATE NOT NULL DEFAULT CURRENT_DATE;
 
 ALTER TABLE car_sharing_service_schema.vehicle_status_history
-    ADD COLUMN record_ts DATE NOT NULL DEFAULT CURRENT_DATE;
+    ADD COLUMN IF NOT EXISTS record_ts DATE NOT NULL DEFAULT CURRENT_DATE;
 
 -- Checks for each table
 SELECT * FROM car_sharing_service_schema.customer;
