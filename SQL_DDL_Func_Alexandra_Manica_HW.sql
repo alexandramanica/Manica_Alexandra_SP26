@@ -25,11 +25,11 @@
 
 --Q: Provide example of data that should NOT appear
 --A: Categories with sales from previous years or quarters, categories with no sales, and categories with total revenue equal to 0.
-categories with sales from previous quarters
-categories with no sales at all
-categories whose total revenue is 0
+-- categories with sales from previous quarters
+-- categories with no sales at all
+-- categories whose total revenue is 0
 
-CREATE OR REPLACE VIEW sales_revenue_by_category_qtr AS
+CREATE OR REPLACE VIEW public.sales_revenue_by_category_qtr AS
 SELECT
     c.name AS category_name,
     SUM(p.amount) AS total_sales_revenue
@@ -52,14 +52,14 @@ HAVING SUM(p.amount) > 0;
 -- In the case of dvdrental database, it returns 0 rows because there is no current-year data.
 
 SELECT *
-FROM sales_revenue_by_category_qtr;
+FROM public.sales_revenue_by_category_qtr;
 
 -- T1. Edge/ No Matching Data Test Case
 -- -- This test case checks how the view behaves when no data exists for the current period.
 -- Expected result: 0 rows (count=0), without errors.
 
 SELECT COUNT(*)
-FROM sales_revenue_by_category_qtr;
+FROM public.sales_revenue_by_category_qtr;
 
 
 -- Task 2.
@@ -89,7 +89,7 @@ FROM sales_revenue_by_category_qtr;
 -- because the quarter is derived from the input date using DATE_PART('quarter', p_ref_date).
 -- 3. If no data exists for the selected quarter and year, the function returns 0 rows without errors.
 
-CREATE OR REPLACE FUNCTION get_sales_revenue_by_category_qtr(p_ref_date DATE)
+CREATE OR REPLACE FUNCTION public.get_sales_revenue_by_category_qtr(p_ref_date DATE)
 RETURNS TABLE (
     category_name TEXT,
     total_sales_revenue NUMERIC
@@ -121,7 +121,7 @@ $$;
 -- In this case, the expected result is 16 categories along with their corresponding revenue.
 
 SELECT *
-FROM get_sales_revenue_by_category_qtr(DATE '2017-02-10');
+FROM public.get_sales_revenue_by_category_qtr(DATE '2017-02-10');
 
 -- T2. Edge Test Case
 
@@ -133,10 +133,10 @@ FROM get_sales_revenue_by_category_qtr(DATE '2017-02-10');
 -- When NULL is passed, DATE_PART returns NULL, so the filter conditions are not met.
 
 SELECT *
-FROM get_sales_revenue_by_category_qtr(CURRENT_DATE);
+FROM public.get_sales_revenue_by_category_qtr(CURRENT_DATE);
 
 SELECT *
-FROM get_sales_revenue_by_category_qtr(NULL);
+FROM public.get_sales_revenue_by_category_qtr(NULL);
 
 -- Task 3.
 
@@ -158,7 +158,7 @@ FROM get_sales_revenue_by_category_qtr(NULL);
 -- 3. If a country has no matching rental data, it does not appear in the result set.
 
 
-CREATE OR REPLACE FUNCTION most_popular_films_by_countries(p_countries TEXT[])
+CREATE OR REPLACE FUNCTION public.most_popular_films_by_countries(p_countries TEXT[])
 RETURNS TABLE(
     country TEXT,
     film TEXT,
@@ -173,7 +173,8 @@ $$
 BEGIN
 
     IF p_countries IS NULL OR array_length(p_countries, 1) IS NULL THEN
-        RAISE EXCEPTION 'Input parameter cannot be NULL or empty.';
+        RAISE NOTICE 'Input parameter cannot be NULL or empty.';
+		RETURN;
     END IF;
 
     RETURN QUERY
@@ -201,7 +202,9 @@ BEGIN
             ON i.film_id = f.film_id
         INNER JOIN public.language l 
             ON f.language_id = l.language_id
-        WHERE c.country = ANY(p_countries)
+        WHERE LOWER(c.country) = ANY(
+								    ARRAY(SELECT LOWER(var) FROM unnest(p_countries) AS var)
+								)
         GROUP BY 
             c.country,
             f.title,
@@ -238,21 +241,21 @@ $$;
 -- This test case returns the most popular film for each country in the input array, based on the highest number of rentals.
 
 SELECT *
-FROM most_popular_films_by_countries(ARRAY['Afghanistan', 'Brazil', 'United States']);
+FROM public.most_popular_films_by_countries(ARRAY['Afghanistan', 'Brazil', 'United States']);
 
 -- T3. Edge / Invalid Input Test Case
 -- This test checks how the function behaves when the input array is NULL. 
 -- Expected result: an exception is raised.
 
 SELECT *
-FROM most_popular_films_by_countries(NULL);
+FROM public.most_popular_films_by_countries(NULL);
 
 -- T3. Missing Data Test Case
 -- This test checks how the function behaves when a country has no rental data.
 -- Expected result: countries with no matching data do not appear in the result set.
 
 SELECT *
-FROM most_popular_films_by_countries(ARRAY['Morroco', 'Brazil']);
+FROM public.most_popular_films_by_countries(ARRAY['Morroco', 'Brazil']);
 
 -- Task 4.
 --Create a function that generates a list of movies available in stock based on a partial title match (e.g., movies containing the word 'love' in their title). 
@@ -284,7 +287,7 @@ FROM most_popular_films_by_countries(ARRAY['Morroco', 'Brazil']);
 -- 4. If multiple matches exist, all matching films currently in stock are returned.
 -- 5. If no matches exist, the function returns one row with a message indicating that the movie was not found in stock.
 
-CREATE OR REPLACE FUNCTION films_in_stock_by_title(p_title_pattern TEXT)
+CREATE OR REPLACE FUNCTION public.films_in_stock_by_title(p_title_pattern TEXT)
 RETURNS TABLE (
     row_num INT,
     film_title TEXT,
@@ -302,7 +305,8 @@ DECLARE
     rec RECORD;
 BEGIN
     IF p_title_pattern IS NULL OR TRIM(p_title_pattern) = '' THEN
-        RAISE EXCEPTION 'Input title pattern cannot be NULL or empty.';
+        RAISE NOTICE 'Input parameter cannot be NULL or empty.';
+		RETURN;
     END IF;
 
     FOR rec IN
@@ -320,7 +324,7 @@ BEGIN
             ON i.inventory_id = r.inventory_id
         INNER JOIN public.customer c 
             ON r.customer_id = c.customer_id
-        WHERE f.title ILIKE p_title_pattern
+       WHERE LOWER(f.title) LIKE LOWER(p_title_pattern)
         AND EXISTS (
             SELECT 1 
             FROM public.inventory i2 
@@ -376,21 +380,21 @@ $$;
 -- This test returns all films currently in stock whose title matches the given pattern.
 
 SELECT *
-FROM films_in_stock_by_title('%love%');
+FROM public.films_in_stock_by_title('%love%');
 
 -- T4. Edge / Invalid Input Test Case
 -- This test checks how the function behaves when the input pattern is NULL.
 -- Expected result: an exception is raised.
 
 SELECT *
-FROM films_in_stock_by_title(NULL);
+FROM public.films_in_stock_by_title(NULL);
 
 -- T4. No Match Test Case
 -- This test checks how the function behaves when no film in stock matches the pattern.
 -- Expected result: one row is returned with a message indicating that the movie was not found in stock.
 
 SELECT *
-FROM films_in_stock_by_title('%No movies match%');
+FROM public.films_in_stock_by_title('%No movies match%');
 
 -- Task 5
 
@@ -419,7 +423,7 @@ FROM films_in_stock_by_title('%No movies match%');
 -- 5. If insertion fails, PostgreSQL rolls back the failed statement automatically.
 -- 6. Consistency is preserved by validating both title uniqueness and language existence before inserting the new row.
 
-CREATE OR REPLACE FUNCTION new_movie(
+CREATE OR REPLACE FUNCTION public.new_movie(
     p_title TEXT,
     p_release_year INTEGER DEFAULT EXTRACT(YEAR FROM CURRENT_DATE)::INTEGER,
     p_language_name TEXT DEFAULT 'Klingon'
@@ -434,7 +438,8 @@ DECLARE
 BEGIN
 
     IF p_title IS NULL OR TRIM(p_title) = '' THEN
-        RAISE EXCEPTION 'Movie title cannot be NULL or empty.';
+        RAISE NOTICE 'Input parameter cannot be NULL or empty.';
+    	RETURN;
     END IF;
 
     IF EXISTS (
@@ -491,7 +496,7 @@ $$;
 -- T5. Valid Test Case with Optional Parameters
 -- This test inserts a new movie with a custom release year and language.
 
-SELECT new_movie('Deadpool', 2016, 'English');
+SELECT public.new_movie('Deadpool', 2016, 'English');
 
 SELECT * FROM public.film f WHERE f.title = 'Deadpool';
 
@@ -499,13 +504,13 @@ SELECT * FROM public.film f WHERE f.title = 'Deadpool';
 -- This test checks how the function behaves when the movie title already exists.
 -- Expected result: an exception is raised.
 
-SELECT new_movie('ACADEMY DINOSAUR');
+SELECT public.new_movie('ACADEMY DINOSAUR');
 
 -- T5. Edge / Invalid Language Test Case
 -- This test checks how the function behaves when the language does not exist.
 -- Expected result: an exception is raised.
 
-SELECT new_movie('Parasite', 2025, 'Unknown Language');
+SELECT public.new_movie('Parasite', 2025, 'Unknown Language');
 
 
 -- Task 6.2 + 6.7
@@ -616,13 +621,13 @@ END;
 $$;
 
 -- Initial function test case
-SELECT * FROM rewards_report(1,1)
+SELECT * FROM public.rewards_report(1,1)
 
 -- Corrected function test case
-SELECT * FROM rewards_report_date_correction_applied(1,1)
+SELECT * FROM public.rewards_report_date_correction_applied(1,1)
 
  --Corrected function test case - without dymanic sql
-SELECT * FROM rewards_report_corrected_v2(1,1)
+SELECT * FROM public.rewards_report_corrected_v2(1,1)
 
 -- Task 6.4.
 
@@ -679,7 +684,7 @@ END;
 $$;
 
 -- Initial function test case
-SELECT * FROM get_customer_balance(100, '2017-02-03')
+SELECT * FROM public.get_customer_balance(100, '2017-02-03')
 
 -- Corrected function test case
-SELECT * FROM get_customer_balance_corrected(100, '2017-02-03')
+SELECT * FROM public.get_customer_balance_corrected(100, '2017-02-03')
